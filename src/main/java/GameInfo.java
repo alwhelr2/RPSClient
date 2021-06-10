@@ -4,7 +4,7 @@ public class GameInfo implements Serializable
 {
     private static final long serialVersionUID = 1L;
     //Msg sent to client prints out to listview, msg sent to server is the name of the choice, name identifies the name of a player when sent to a client
-    String msg, name;
+    String msg, name, pass;
     //Choice sent to the server is the client's choice
     int choice;
     //Message type
@@ -24,6 +24,7 @@ public class GameInfo implements Serializable
     {
         msg = "";
         name = "";
+        pass = "";
         choice = -1;
         type = t;
     }

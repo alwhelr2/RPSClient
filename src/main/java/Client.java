@@ -66,7 +66,7 @@ public class Client extends Thread
             {
                 //Try to read data, and print to listView if it contains a message
                 GameInfo g = (GameInfo)in.readObject();
-                if (!g.msg.equals("")) callback.accept(g.msg);
+                if (g.type == -1) callback.accept(g.msg);
                 //Notify the GUI of the message we received so it can update
                 listener.dataReceived(g);
             }

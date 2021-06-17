@@ -9,18 +9,22 @@ import javafx.scene.control.*;
 import javafx.scene.image.*;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
+import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
 import javafx.stage.WindowEvent;
 import javafx.util.Duration;
 
+import javax.tools.Tool;
 import java.util.HashMap;
 
 public class RPSLS extends Application implements MyListener
 {
     HashMap<String, Scene> sceneMap;
-    Button joinButton, rockB, paperB, scissorB, lizardB, spockB, nameB;
-    TextField portField, ipField, nameField, passwordField;
+    HashMap<String, String> namesMap;
+    Button joinButton, rockB, paperB, scissorB, lizardB, spockB, nameB, createUserB;
+    TextField portField, ipField, nameField;
+    PasswordField passwordField;
     Label portL, ipL;
     ListView serverInfo;
     Client client;
@@ -28,6 +32,7 @@ public class RPSLS extends Application implements MyListener
     private final Image rockImg = new Image("/rock.jpg"), paperImg = new Image("/paper.jpg"), scissorImg = new Image("/scissors.jpg"), lizardImg = new Image("/lizard.jpg"), spockImg = new Image("/spock.jpg");
     boolean lobby = false, dropConnection = false, connected = false, inGame = false;
     PauseTransition moveToLobby;
+
 
     public RPSLS getInstance()
     {
@@ -114,7 +119,11 @@ public class RPSLS extends Application implements MyListener
         if (g.type == 4)
         {
             Platform.runLater(()->{
-                new Alert(Alert.AlertType.ERROR, "You cannot challenge yourself!", ButtonType.OK).show();
+                Alert a = new Alert(Alert.AlertType.INFORMATION, g.msg, ButtonType.OK);
+                a.setTitle("Your player stats: ");
+                a.setHeaderText(g.name + ": ");
+                a.getDialogPane().getChildren().stream().filter(node -> node instanceof Label).forEach(node -> ((Label)node).setMinHeight(Region.USE_PREF_SIZE));
+                a.show();
             });
         }
         //Server connection dropped
@@ -148,11 +157,29 @@ public class RPSLS extends Application implements MyListener
             });
             nameB.setDisable(false);
         }
+        if (g.type == 10)
+        {
+            namesMap.put(g.msg, g.name);
+            Platform.runLater(()->{
+                serverInfo.refresh();
+            });
+        }
+        if (g.type == 11)
+        {
+            Platform.runLater(()->{
+                Alert a = new Alert(Alert.AlertType.INFORMATION, g.msg, ButtonType.OK);
+                a.setTitle("Leaderboard: ");
+                a.setHeaderText("Stats: ");
+                a.getDialogPane().getChildren().stream().filter(node -> node instanceof Label).forEach(node -> ((Label)node).setMinHeight(Region.USE_PREF_SIZE));
+                a.show();
+            });
+        }
     }
 
     @Override
     public void start(Stage primaryStage) throws Exception
     {
+        namesMap = new HashMap<String, String>();
         moveToLobby = new PauseTransition(Duration.seconds(5));
         moveToLobby.setOnFinished(new EventHandler<ActionEvent>(){
             public void handle(ActionEvent e)
@@ -161,6 +188,7 @@ public class RPSLS extends Application implements MyListener
                     return;
                 //Notify the server we need to go back to the lobby, send playerlist
                 GameInfo g = new GameInfo(6);
+                lobby =  true;
                 client.send(g);
                 inGame = false;
             }
@@ -168,6 +196,25 @@ public class RPSLS extends Application implements MyListener
         stage = primaryStage;
         // TODO Auto-generated method stub
         primaryStage.setTitle("RPSLS Client");
+        createUserB = new Button("Create User");
+        createUserB.setOnAction(new EventHandler<ActionEvent>() {
+            @Override
+            public void handle(ActionEvent event) {
+                String name = nameField.getText();
+                if (name.equals(""))
+                {
+                    serverInfo.getItems().add("Name cannot be empty.");
+                    serverInfo.scrollTo(serverInfo.getItems().size() - 1);
+                    return;
+                }
+                GameInfo g = new GameInfo(9);
+                g.msg = name;
+                g.pass = passwordField.getText();
+                client.send(g);
+                createUserB.setDisable(true);
+                nameB.setDisable(true);
+            }
+        });
         nameB = new Button("Login");
         nameB.setDisable(true);
         nameB.setDefaultButton(true);
@@ -185,7 +232,8 @@ public class RPSLS extends Application implements MyListener
                 g.msg = name;
                 g.pass = passwordField.getText();
                 client.send(g);
-
+                nameB.setDisable(true);
+                createUserB.setDisable(true);
             }
         });
         nameField = new TextField();
@@ -261,7 +309,7 @@ public class RPSLS extends Application implements MyListener
         });
         portField = new TextField();
         ipField = new TextField();
-        passwordField = new TextField();
+        passwordField = new PasswordField();
         HBox pBox = new HBox(portL, portField);
         pBox.setHgrow(portField, Priority.ALWAYS);
         HBox iBox = new HBox(ipL, ipField);
@@ -277,9 +325,6 @@ public class RPSLS extends Application implements MyListener
                 try
                 {
                     int port = Integer.parseInt(portField.getText());
-                    /*
-                    primaryStage.setScene(sceneMap.get("game"));
-                    primaryStage.sizeToScene();*/
                     client = new Client(data->
                     {
                         Platform.runLater(()->{
@@ -290,9 +335,12 @@ public class RPSLS extends Application implements MyListener
                                 {
                                     connected = false;
                                     dropConnection = true;
-                                } else if (data.equals("No such user exists."))
-                                {
 
+                                    joinButton.setDisable(false);
+                                } else if (data.equals("Client with that name already logged in, choose another name.") || data.equals("Client with that name already exists, pick a new name.") || data.equals("Password must not be empty.") || data.equals("Wrong password!") || data.equals("No such user exists."))
+                                {
+                                    nameB.setDisable(false);
+                                    createUserB.setDisable(false);
                                 }
                                 return;
                             }
@@ -305,6 +353,7 @@ public class RPSLS extends Application implements MyListener
                 catch (Exception ex)
                 {
                     new Alert(Alert.AlertType.ERROR, "Port must be an integer number.", ButtonType.OK).show();
+                    joinButton.setDisable(false);
                 }
             }
         });
@@ -318,6 +367,7 @@ public class RPSLS extends Application implements MyListener
 
         //Code to assign images to each item in listview if it contains a move report from the server
         serverInfo.setCellFactory(param -> new ListCell<String>(){
+            final Tooltip tooltip = new Tooltip();
             private ImageView imageView = new ImageView();
             @Override
             public void updateItem(String name, boolean empty)
@@ -327,6 +377,7 @@ public class RPSLS extends Application implements MyListener
                 {
                     setText("");
                     setGraphic(null);
+                    setTooltip(null);
                 }
                 else
                 {
@@ -343,6 +394,11 @@ public class RPSLS extends Application implements MyListener
                     else
                         imageView.setImage(null);
                     setText(name);
+                    if (namesMap.containsKey(name))
+                    {
+                        tooltip.setText(namesMap.get(name));
+                        setTooltip(tooltip);
+                    }
                     setGraphic(imageView);
                 }
             }
@@ -351,12 +407,26 @@ public class RPSLS extends Application implements MyListener
         //When an item is clicked, it send the player's name to the server and starts a new game.
         serverInfo.setOnMouseClicked(e->{
             //Don't listen if we aren't in the lobby or the selected index is invalid
-            if (!lobby || serverInfo.getSelectionModel().getSelectedIndex() <= 0)
+            if (!lobby)
+            {
                 return;
-            String op = serverInfo.getSelectionModel().getSelectedItem().toString();
-            GameInfo s = new GameInfo(-1);
-            s.msg = op;
-            client.send(s);
+            }
+            else
+            {
+                if (serverInfo.getSelectionModel().getSelectedIndex() == 0)
+                {
+                    GameInfo g = new GameInfo(11);
+                    client.send(g);
+                }
+                else if (serverInfo.getSelectionModel().getSelectedIndex() > 0)
+                {
+                    String op = serverInfo.getSelectionModel().getSelectedItem().toString();
+                    GameInfo s = new GameInfo(-1);
+                    s.msg = op;
+                    client.send(s);
+                }
+            }
+
         });
         serverInfo.setPrefHeight(125);
         HBox b2Box = new HBox(15, rockB, paperB, scissorB, lizardB, spockB);
@@ -368,7 +438,7 @@ public class RPSLS extends Application implements MyListener
         sceneMap.put("game", gameScene);
         HBox p3Box = new HBox(new Label("Password: "), passwordField);
         p3Box.setHgrow(passwordField, Priority.ALWAYS);
-        HBox nameBox = new HBox(nameB);
+        HBox nameBox = new HBox(25, nameB, createUserB);
         nameBox.setAlignment(Pos.CENTER);
         Scene loginScene = new Scene(new VBox(30, p2Box, p3Box, nameBox), 400, 200);
         sceneMap.put("login", loginScene);
